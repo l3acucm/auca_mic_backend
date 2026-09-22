@@ -1,0 +1,78 @@
+name: Docker Image CI
+on:
+  push:
+    branches:
+      - main
+jobs:
+  build-test-push:
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: abcxyz123
+          POSTGRES_DB: gh_action_ci_test
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+
+      - name: Build docker image
+        id: docker_build
+        uses: docker/build-push-action@v2
+        with:
+          push: false
+          context: .
+          tags: '${{ vars.DOCKER_IMAGE }}'
+
+      # gunicorn.sh runs `pytest` when TESTING=1 (instead of migrate+gunicorn).
+      - name: Test docker image
+        run: |
+          docker run \
+          --network="host" \
+          -e PYTHONUNBUFFERED=1 \
+          -e TESTING=1 \
+          -e DEVELOPMENT=1 \
+          -e SECRET_KEY=123abcxyz \
+          -e ALLOWED_HOSTS=lvh.me,localhost \
+          -e DOMAIN=lvh.me \
+          -e POSTGRES_DATABASE_NAME=gh_action_ci_test \
+          -e POSTGRES_USER=postgres \
+          -e POSTGRES_PASSWORD=abcxyz123 \
+          -e POSTGRES_ENDPOINT=172.17.0.1 \
+          -e POSTGRES_PORT=5432 \
+          '${{ vars.DOCKER_IMAGE }}'
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push docker image
+        id: docker_push
+        uses: docker/build-push-action@v2
+        with:
+          push: true
+          context: .
+          tags: '${{ vars.DOCKER_IMAGE }}'
+
+      # Targeted deploy: this is a SHARED host (presale/realty/vigil/crystalwater
+      # also run here), so we do NOT `docker compose down` the whole stack — we
+      # pull the freshly-pushed image and recreate only auca_mic_django.
+      - name: Set up SSH and deploy
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan ${{ vars.SSH_HOST }} >> ~/.ssh/known_hosts
+
+          ssh root@${{ vars.SSH_HOST }} "
+            set -e
+            cd /root &&
+            docker compose pull auca_mic_django &&
+            docker compose up -d auca_mic_django &&
+            docker image prune -f
+          "

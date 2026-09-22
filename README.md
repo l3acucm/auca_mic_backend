@@ -1,0 +1,124 @@
+# auca_mic_backend
+
+Django + DRF backend for the AUCA psycholinguistic naming-experiment tool
+(see `../BRD.md`). Researchers configure experiments (stimulus images +
+answer dictionaries), launch sessions for participants, and participants run
+the naming task entirely in the browser (Web Speech API — no server-side
+speech recognition, see BRD 6.1). The backend stores experiment configs,
+scores each answer against the dictionary, and generates XLSX exports.
+
+Built to the house conventions (presale_backend/cashway_backend): Poetry,
+single `settings.py` with `get_env_setting()`, app sub-packages
+(`models/ views/ serializers/ services/`), `ModelViewSet` +
+`serializers_of_view_actions`, structlog, and **django-moses** for auth.
+
+## Auth — researchers only, admin-created accounts
+
+No self-registration (BRD 1.2/8.7). Create a researcher account with:
+
+```sh
+dotenv -f .env run -- poetry run python manage.py createsuperuser
+# prompts for phone_number + password
+```
+
+Login:
+
+1. `POST /moses/token/obtain/` `{phone_number, password, domain}` → `{access, refresh}`.
+2. `POST /moses/token/refresh/` `{refresh}` → `{access}`.
+
+`domain` must match the `Site` row in the DB — the
+`experiments.0002_set_site_domain` migration sets that Site to the `DOMAIN`
+env var on every `migrate`.
+
+Participants never authenticate — they open the unique session URL the
+researcher hands them (the Session's UUID, see below).
+
+All API responses are wrapped by moses' renderer as
+`{"errors": {...}, "data": {...}}`. Errors use string codes (see
+`project/errors.py`).
+
+## Researcher API (`/experiments/`, all `IsAuthenticated`)
+
+| Method | Endpoint | Body | Result |
+|---|---|---|---|
+| POST | `/experiments/stimulus-sets/` (multipart) | `archive` (zip), `name` | Parses the ZIP (images + vocab .txt), uploads images to storage, returns the `StimulusSet`. |
+| GET | `/experiments/stimulus-sets/` | — | Lists the caller's stimulus sets. |
+| POST | `/experiments/experiments/` | `name, description, language, num_trials, stimulus_set` | Creates an experiment config. |
+| GET/PATCH | `/experiments/experiments/{id}/` | (name, description on PATCH) | Detail / edit — stimuli & vocab are fixed once created. |
+| POST | `/experiments/experiments/{id}/archive/` | — | Archives the experiment. |
+| POST | `/experiments/experiments/{id}/start-session/` | `{participant_id?}` | Starts a new attempt, returns the `session_url` to hand the participant. |
+| GET | `/experiments/results/` | `?experiment=&participant_id=&date_from=&date_to=` | Lists completed attempts. |
+| GET | `/experiments/results/{id}/` | — | Full trial-by-trial detail. |
+| GET | `/experiments/results/export/?experiment={id}` | — | All participants of one experiment as a single XLSX. |
+
+`ResultListSerializer.download_url` is a presigned S3 URL to the
+per-participant XLSX (24h expiry, see `RESULT_DOWNLOAD_URL_EXPIRY_SECONDS`).
+
+## Participant API (`/public/sessions/{session_id}/`, no auth)
+
+| Method | Endpoint | Body | Result |
+|---|---|---|---|
+| GET | `/public/sessions/{id}/` | — | Session state: language, stimulus count, ordered stimulus image URLs (no vocab — scoring stays server-side). |
+| POST | `/public/sessions/{id}/trials/` | `{stimulus_filename, reaction_time_sec, recognized_text, event, timestamp_stimulus, timestamp_speech_start?}` | Scores one answer against the vocab (`event`: `recognized`/`skipped`/`timeout`/`speech_error`) and appends it to the session. |
+| POST | `/public/sessions/{id}/complete/` | — | Finalizes the attempt: builds + uploads the XLSX, creates the `Result` row. |
+
+The frontend does all speech recognition and timing client-side (Web Speech
+API) and posts one `trials/` call per stimulus — see BRD module 3.
+
+## Vocab file format
+
+One line per stimulus in a `.txt` file inside the ZIP archive:
+
+```
+beetle	жук;букашка;жесткокрылое
+leaf	лист, листик, листок
+```
+
+`<image filename without extension><tab or spaces><answers separated by ; or ,>`.
+Matching against the recognized text is a case-insensitive substring check —
+no morphological analysis (see BRD допущение 4).
+
+## Local development
+
+```sh
+poetry install
+cp sample.env .env            # then fill in the values
+# Postgres must be running with the DB/role from .env
+dotenv -f .env run -- poetry run python manage.py migrate
+dotenv -f .env run -- poetry run python manage.py runserver
+```
+
+Run tests:
+
+```sh
+dotenv -f .env run -- poetry run pytest
+```
+
+## Configuration
+
+See [`sample.env`](./sample.env) — every variable is documented there, for
+local dev where you set all of them yourself.
+
+**In production**, this app runs on a shared host alongside other apps, split
+into `global.env` (shared) + `auca_mic.env` (this app only):
+
+| File | Vars |
+|---|---|
+| `global.env` (shared, already on the host) | `SECRET_KEY`, `POSTGRES_USER`/`PASSWORD`/`ENDPOINT`/`PORT` (one shared role for every app), `AWS_ACCESS_KEY`/`SECRET_KEY`, `S3_ENDPOINT_URL`, `PRODUCTION` |
+| `auca_mic.env` (this app) | `POSTGRES_DATABASE_NAME=auca_mic`, `DOMAIN=micauca-api.vassilyv.me`, `FRONTEND_ORIGINS=https://micauca.vassilyv.me`, `AWS_BUCKET_NAME` (its own bucket) |
+
+Docker Compose loads both (`env_file: [global.env, auca_mic.env]`, see
+`compose/auca_mic.yaml` in the shared `presale-agent` compose repo) — Django
+just sees the merged result, same `get_env_setting()` either way.
+
+## CI/CD, compose, deploy
+
+- `.github/workflows/build-test-deploy.yaml` — build → self-test (`TESTING=1`
+  → pytest against a throwaway Postgres) → push to Docker Hub
+  (`l3acucm/auca-mic-backend`) → SSH deploy (`docker compose pull && up -d
+  auca_mic_django`, targeted — never `docker compose down` the whole shared
+  host).
+- `init/auca_mic.sql` — `CREATE DATABASE auca_mic;` on the shared postgres
+  role (this host uses one role for every app, not a role per app).
+- Compose fragment: `compose/auca_mic.yaml` in the shared `presale-agent`
+  compose repo, included (commented until the image + `auca_mic.env` exist).
