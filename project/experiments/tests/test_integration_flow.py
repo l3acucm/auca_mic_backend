@@ -26,7 +26,12 @@ class FullExperimentFlowTests(APITestCase):
         self.client.force_authenticate(self.user)
 
     def test_full_flow(self):
-        created_set = self.client.post(reverse('experiments:StimulusSet-list'), {'name': 'demo set'})
+        # format='json' matters here: the frontend posts JSON (axios default),
+        # and the default test-client format (multipart) previously masked a
+        # missing JSONParser on this viewset.
+        created_set = self.client.post(
+            reverse('experiments:StimulusSet-list'), {'name': 'demo set'}, format='json'
+        )
         self.assertEqual(created_set.status_code, 201, created_set.data)
         stimulus_set_id = created_set.data['id']
 

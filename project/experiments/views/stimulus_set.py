@@ -1,5 +1,5 @@
 from rest_framework.decorators import action
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
@@ -20,7 +20,8 @@ class StimulusSetPermission(BasePermission):
 class StimulusSetViewSet(ModelViewSet):
     permission_classes = [StimulusSetPermission]
     http_method_names = ['get', 'post', 'head', 'options']
-    parser_classes = [MultiPartParser, FormParser]
+    # 'create' takes plain JSON ({name}); 'add_stimulus' takes multipart (file).
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
     serializers_of_view_actions = {
         'list': serializers.StimulusSetSerializer,
         'create': serializers.StimulusSetCreateSerializer,
