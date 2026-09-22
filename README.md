@@ -17,9 +17,20 @@ single `settings.py` with `get_env_setting()`, app sub-packages
 No self-registration (BRD 1.2/8.7). Create a researcher account with:
 
 ```sh
-dotenv -f .env run -- poetry run python manage.py createsuperuser
-# prompts for phone_number + password
+dotenv -f .env run -- poetry run python manage.py shell -c "
+from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
+User = get_user_model()
+site = Site.objects.get(id=1)
+User.objects.create_superuser(phone_number='+996700000000', password='change-me', site=site)
+"
 ```
+
+**Not** plain `manage.py createsuperuser` — `CustomUser.site` is a required FK
+that isn't in moses' `REQUIRED_FIELDS`, so the interactive/`--noinput` command
+crashes with `IntegrityError: null value in column "site_id"` (same class of
+bug as the registration gotcha in `moses.md`). Passing `site=` explicitly
+through the manager sidesteps it.
 
 Login:
 
