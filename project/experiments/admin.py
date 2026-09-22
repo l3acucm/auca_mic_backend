@@ -8,7 +8,7 @@ class StimulusSetAdmin(admin.ModelAdmin):
     list_display = ['id', 'name', 'user', 'stimulus_count', 'created_at']
     list_filter = ['created_at']
     search_fields = ['name']
-    readonly_fields = ['id', 's3_path', 'created_at']
+    readonly_fields = ['id', 's3_path', 'vocab_data', 'created_at']
 
 
 @admin.register(Experiment)

@@ -1,11 +1,9 @@
-"""End-to-end smoke test of the whole researcher+participant flow: upload a
-stimulus ZIP, create an experiment, start a session, answer every trial, and
-complete it — verifying scoring and XLSX generation actually run together,
-not just each in isolation."""
-import io
-import zipfile
-
+"""End-to-end smoke test of the whole researcher+participant flow: build a
+stimulus set one image at a time, create an experiment, start a session,
+answer every trial, and complete it — verifying scoring and XLSX generation
+actually run together, not just each in isolation."""
 from django.contrib.sites.models import Site
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
@@ -13,14 +11,8 @@ from moses.models import CustomUser
 from project.experiments.models import Result, StimulusSet
 
 
-def _build_zip():
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, 'w') as zf:
-        zf.writestr('images/beetle.jpg', b'not-a-real-jpeg-but-fine-for-import')
-        zf.writestr('images/leaf.jpg', b'not-a-real-jpeg-but-fine-for-import')
-        zf.writestr('vocab.txt', 'beetle\tжук;букашка\nleaf\tлист, листик\n')
-    buf.seek(0)
-    return buf
+def _image(name: str) -> SimpleUploadedFile:
+    return SimpleUploadedFile(name, b'not-a-real-jpeg-but-fine-for-this-test', content_type='image/jpeg')
 
 
 class FullExperimentFlowTests(APITestCase):
@@ -34,13 +26,19 @@ class FullExperimentFlowTests(APITestCase):
         self.client.force_authenticate(self.user)
 
     def test_full_flow(self):
-        upload = self.client.post(
-            reverse('experiments:StimulusSet-list'),
-            {'name': 'demo set', 'archive': _build_zip()},
-            format='multipart',
-        )
-        self.assertEqual(upload.status_code, 201, upload.data)
-        stimulus_set = StimulusSet.objects.get()
+        created_set = self.client.post(reverse('experiments:StimulusSet-list'), {'name': 'demo set'})
+        self.assertEqual(created_set.status_code, 201, created_set.data)
+        stimulus_set_id = created_set.data['id']
+
+        for filename, answers in [('beetle.jpg', 'жук;букашка'), ('leaf.jpg', 'лист, листик')]:
+            added = self.client.post(
+                reverse('experiments:StimulusSet-add-stimulus', args=[stimulus_set_id]),
+                {'image': _image(filename), 'answers': answers},
+                format='multipart',
+            )
+            self.assertEqual(added.status_code, 201, added.data)
+
+        stimulus_set = StimulusSet.objects.get(id=stimulus_set_id)
         self.assertEqual(stimulus_set.stimulus_count, 2)
         self.assertEqual(set(stimulus_set.vocab_data.keys()), {'beetle.jpg', 'leaf.jpg'})
 

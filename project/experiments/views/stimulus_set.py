@@ -1,5 +1,4 @@
-import structlog
-from rest_framework import status
+from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
@@ -7,9 +6,7 @@ from rest_framework.viewsets import ModelViewSet
 
 from project.experiments import serializers
 from project.experiments.models import StimulusSet
-from project.experiments.services.stimulus_import import import_stimulus_archive
-
-logger = structlog.get_logger(__name__)
+from project.experiments.services.stimulus_set import add_stimulus
 
 
 class StimulusSetPermission(BasePermission):
@@ -25,22 +22,30 @@ class StimulusSetViewSet(ModelViewSet):
     http_method_names = ['get', 'post', 'head', 'options']
     parser_classes = [MultiPartParser, FormParser]
     serializers_of_view_actions = {
-        'create': serializers.StimulusSetUploadSerializer,
+        'list': serializers.StimulusSetSerializer,
+        'create': serializers.StimulusSetCreateSerializer,
+        'add_stimulus': serializers.AddStimulusSerializer,
     }
 
     def get_serializer_class(self):
-        return self.serializers_of_view_actions.get(self.action, serializers.StimulusSetSerializer)
+        return self.serializers_of_view_actions.get(self.action, serializers.StimulusSetDetailSerializer)
 
     def get_queryset(self):
         return StimulusSet.objects.filter(user=self.request.user)
 
     def create(self, request, *args, **kwargs):
-        upload = self.get_serializer(data=request.data)
-        upload.is_valid(raise_exception=True)
-        stimulus_set = import_stimulus_archive(
-            upload.validated_data['archive'], request.user,
-            name=upload.validated_data.get('name', ''),
-        )
-        return Response(
-            serializers.StimulusSetSerializer(stimulus_set).data, status=status.HTTP_201_CREATED
-        )
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        stimulus_set = serializer.save()
+        return Response(serializers.StimulusSetDetailSerializer(stimulus_set).data, status=201)
+
+    @action(detail=True, methods=['post'], url_path='stimuli')
+    def add_stimulus(self, request, pk=None):
+        """Add one image + its accepted answers to this set (BRD 2.2,
+        redesigned: researchers build a set up in the UI, not a ZIP)."""
+        stimulus_set = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        add_stimulus(stimulus_set, serializer.validated_data['image'], serializer.validated_data['answers'])
+        stimulus_set.refresh_from_db()
+        return Response(serializers.StimulusSetDetailSerializer(stimulus_set).data, status=201)

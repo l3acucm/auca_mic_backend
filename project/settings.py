@@ -152,11 +152,9 @@ USE_TZ = True
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-# Max upload accepted in memory before Django spills to a temp file — the ZIP
-# stimulus archives (up to 500MB, see BRD 7.3) always go to disk either way.
+# Max upload accepted in memory before Django spills to a temp file.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
-STIMULUS_ARCHIVE_MAX_BYTES = 500 * 1024 * 1024
 STIMULUS_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 
 # Presigned download URL lifetime for result XLSX files (BRD 6.2).

@@ -52,8 +52,10 @@ All API responses are wrapped by moses' renderer as
 
 | Method | Endpoint | Body | Result |
 |---|---|---|---|
-| POST | `/experiments/stimulus-sets/` (multipart) | `archive` (zip), `name` | Parses the ZIP (images + vocab .txt), uploads images to storage, returns the `StimulusSet`. |
+| POST | `/experiments/stimulus-sets/` | `{name}` | Creates an empty stimulus set. |
+| POST | `/experiments/stimulus-sets/{id}/stimuli/` (multipart) | `image` (jpg/jpeg), `answers` (`;`/`,`-separated) | Uploads one image to storage and adds it to the set's vocab; returns the full set with all stimuli so far. |
 | GET | `/experiments/stimulus-sets/` | — | Lists the caller's stimulus sets. |
+| GET | `/experiments/stimulus-sets/{id}/` | — | Full detail: every stimulus (filename, answers, image URL) added so far. |
 | POST | `/experiments/experiments/` | `name, description, language, num_trials, stimulus_set` | Creates an experiment config. |
 | GET/PATCH | `/experiments/experiments/{id}/` | (name, description on PATCH) | Detail / edit — stimuli & vocab are fixed once created. |
 | POST | `/experiments/experiments/{id}/archive/` | — | Archives the experiment. |
@@ -76,18 +78,13 @@ per-participant XLSX (24h expiry, see `RESULT_DOWNLOAD_URL_EXPIRY_SECONDS`).
 The frontend does all speech recognition and timing client-side (Web Speech
 API) and posts one `trials/` call per stimulus — see BRD module 3.
 
-## Vocab file format
+## Building a stimulus set
 
-One line per stimulus in a `.txt` file inside the ZIP archive:
-
-```
-beetle	жук;букашка;жесткокрылое
-leaf	лист, листик, листок
-```
-
-`<image filename without extension><tab or spaces><answers separated by ; or ,>`.
-Matching against the recognized text is a case-insensitive substring check —
-no morphological analysis (see BRD допущение 4).
+Each stimulus is added individually through the UI/API — pick one image, type
+its accepted answers (`;` or `,`-separated, e.g. `жук; букашка`), submit; repeat
+for every stimulus. No ZIP/vocab-file upload (dropped 2026-09-22 — see BRD
+changelog). Matching the recognized text against the answers is a
+case-insensitive substring check — no morphological analysis (BRD допущение 4).
 
 ## Local development
 
