@@ -34,9 +34,12 @@ class PublicSessionSerializer(serializers.ModelSerializer):
 
 
 class TrialInputSerializer(serializers.Serializer):
+    """No transcript: `onresult` needs a round trip to Chrome's cloud speech
+    backend, which in practice produced no result at all (see BRD changelog).
+    `event='recognized'` means only "voice detected" (`onspeechstart`,
+    purely local) — reaction time is the signal, not recognized content."""
     stimulus_filename = serializers.CharField()
     reaction_time_sec = serializers.FloatField(min_value=0)
-    recognized_text = serializers.CharField(required=False, allow_blank=True, default='')
     event = serializers.ChoiceField(choices=['recognized', 'skipped', 'timeout', 'speech_error'])
     timestamp_stimulus = serializers.DateTimeField()
     timestamp_speech_start = serializers.DateTimeField(required=False, allow_null=True, default=None)

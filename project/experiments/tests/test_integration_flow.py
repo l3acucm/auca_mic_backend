@@ -68,12 +68,10 @@ class FullExperimentFlowTests(APITestCase):
         self.assertEqual(len(stimuli), 2)
 
         for stim in stimuli:
-            correct_word = stimulus_set.vocab_data[stim['filename']][0]
             trial = self.client.post(
                 reverse('PublicSession-trials', args=[session_id]), {
                     'stimulus_filename': stim['filename'],
                     'reaction_time_sec': 0.5,
-                    'recognized_text': correct_word,
                     'event': 'recognized',
                     'timestamp_stimulus': '2026-09-22T10:00:00Z',
                     'timestamp_speech_start': '2026-09-22T10:00:00.5Z',

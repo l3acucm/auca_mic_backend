@@ -13,7 +13,7 @@ from project.experiments.services.scoring import CORRECT, ERROR, INCORRECT, SKIP
 
 logger = structlog.get_logger(__name__)
 
-_RESULT_HEADERS = ['Стимул', 'Время реакции (сек)', 'Кодирование', 'Распознанный текст']
+_RESULT_HEADERS = ['Стимул', 'Время реакции (сек)', 'Кодирование']
 _SUMMARY_HEADERS = [
     'ID участника', 'Дата и время попытки', 'Количество попыток выполненных',
     'Общее время попытки (сек)', 'Количество верных ответов',
@@ -47,10 +47,7 @@ def build_result_workbook(participant_id: str, trial_data: list[dict], aggregate
     ws.title = 'Результаты'
     ws.append(_RESULT_HEADERS)
     for trial in trial_data:
-        ws.append([
-            trial['stimulus_filename'], round(trial['reaction_time_sec'], 3),
-            trial['code'], trial.get('recognized_text', ''),
-        ])
+        ws.append([trial['stimulus_filename'], round(trial['reaction_time_sec'], 3), trial['code']])
 
     summary = wb.create_sheet('Сводка')
     summary.append(_SUMMARY_HEADERS)
@@ -100,6 +97,5 @@ def build_experiment_workbook(experiment, results) -> Workbook:
             trials.append([
                 result.participant_id, trial['stimulus_filename'],
                 round(trial['reaction_time_sec'], 3), trial['code'],
-                trial.get('recognized_text', ''),
             ])
     return wb

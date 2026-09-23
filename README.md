@@ -72,19 +72,27 @@ per-participant XLSX (24h expiry, see `RESULT_DOWNLOAD_URL_EXPIRY_SECONDS`).
 | Method | Endpoint | Body | Result |
 |---|---|---|---|
 | GET | `/public/sessions/{id}/` | — | Session state: language, stimulus count, ordered stimulus image URLs (no vocab — scoring stays server-side). |
-| POST | `/public/sessions/{id}/trials/` | `{stimulus_filename, reaction_time_sec, recognized_text, event, timestamp_stimulus, timestamp_speech_start?}` | Scores one answer against the vocab (`event`: `recognized`/`skipped`/`timeout`/`speech_error`) and appends it to the session. |
+| POST | `/public/sessions/{id}/trials/` | `{stimulus_filename, reaction_time_sec, event, timestamp_stimulus, timestamp_speech_start?}` | Records one trial (`event`: `recognized`/`skipped`/`timeout`/`speech_error`) and appends it to the session. |
 | POST | `/public/sessions/{id}/complete/` | — | Finalizes the attempt: builds + uploads the XLSX, creates the `Result` row. |
 
-The frontend does all speech recognition and timing client-side (Web Speech
-API) and posts one `trials/` call per stimulus — see BRD module 3.
+**No transcript.** `onresult` (Chrome's cloud speech-to-text) needs a network
+round trip that in practice produced no result at all — every trial hit the
+5s failsafe with no error, ever, even during loud sustained speech. Reaction
+time is measured stimulus-shown -> `onspeechstart` instead, which is local
+voice-activity detection with no network dependency. `event: 'recognized'`
+means "a voice was detected", not "said the right word" — `code` is always
+`CORRECT` (1) for it now; the vocab/answers a stimulus set stores are kept as
+reference metadata for the researcher, not auto-scored against. See BRD
+changelog (2026-09-23) for the full reasoning.
 
 ## Building a stimulus set
 
 Each stimulus is added individually through the UI/API — pick one image, type
 its accepted answers (`;` or `,`-separated, e.g. `жук; букашка`), submit; repeat
 for every stimulus. No ZIP/vocab-file upload (dropped 2026-09-22 — see BRD
-changelog). Matching the recognized text against the answers is a
-case-insensitive substring check — no morphological analysis (BRD допущение 4).
+changelog). The answers are reference metadata for the researcher only — they
+are no longer auto-scored against a recognized transcript (dropped
+2026-09-23, also in the BRD changelog).
 
 ## Local development
 

@@ -42,24 +42,24 @@ class PublicSessionViewSet(GenericViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        vocab_words = session.experiment.stimulus_set.vocab_data.get(data['stimulus_filename'])
-        if vocab_words is None:
+        if data['stimulus_filename'] not in session.experiment.stimulus_set.vocab_data:
             raise CustomAPIException({
                 'stimulus_filename': [KwargsError(code=errors.UNKNOWN_STIMULUS)]
             })
 
+        # No transcript to check against the vocab (see TrialInputSerializer)
+        # — 'recognized' just means a voice was detected at all.
         code = {
-            'recognized': lambda: scoring.code_response(data['recognized_text'], vocab_words),
-            'skipped': lambda: scoring.SKIPPED,
-            'timeout': lambda: scoring.ERROR,
-            'speech_error': lambda: scoring.ERROR,
-        }[data['event']]()
+            'recognized': scoring.CORRECT,
+            'skipped': scoring.SKIPPED,
+            'timeout': scoring.ERROR,
+            'speech_error': scoring.ERROR,
+        }[data['event']]
 
         session.trial_data.append({
             'stimulus_filename': data['stimulus_filename'],
             'reaction_time_sec': data['reaction_time_sec'],
             'code': code,
-            'recognized_text': data['recognized_text'],
             # Kept alongside `code` (both map to code=3) so timeout vs a real
             # recognition error are distinguishable when debugging — 'code'
             # alone can't tell them apart after the fact.
