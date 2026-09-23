@@ -63,6 +63,13 @@ class ExperimentViewSet(ModelViewSet):
         experiment.save(update_fields=['status', 'updated_at'])
         return Response(serializers.ExperimentDetailSerializer(experiment).data)
 
+    @action(detail=True, methods=['post'])
+    def unarchive(self, request, pk=None):
+        experiment = self.get_object()
+        experiment.status = Experiment.Status.ACTIVE
+        experiment.save(update_fields=['status', 'updated_at'])
+        return Response(serializers.ExperimentDetailSerializer(experiment).data)
+
     @action(detail=True, methods=['post'], url_path='start-session')
     def start_session(self, request, pk=None):
         """BRD 2.8/2.9: launch a new attempt for a participant, return its
