@@ -60,6 +60,10 @@ class PublicSessionViewSet(GenericViewSet):
             'reaction_time_sec': data['reaction_time_sec'],
             'code': code,
             'recognized_text': data['recognized_text'],
+            # Kept alongside `code` (both map to code=3) so timeout vs a real
+            # recognition error are distinguishable when debugging — 'code'
+            # alone can't tell them apart after the fact.
+            'event': data['event'],
             'timestamp_stimulus': data['timestamp_stimulus'].isoformat(),
             'timestamp_speech_start': (
                 data['timestamp_speech_start'].isoformat() if data['timestamp_speech_start'] else None
